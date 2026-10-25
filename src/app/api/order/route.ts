@@ -55,8 +55,8 @@ export async function POST(request: NextRequest) {
       notes: "",
     };
 
-    await saveOrderToSheet(order);
-    await sendOrderEmails(order);
+    const sheetResult = await saveOrderToSheet(order);
+    if (!sheetResult.alreadySaved) await sendOrderEmails(order);
 
     return NextResponse.json({
       success: true,

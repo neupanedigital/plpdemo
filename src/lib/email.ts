@@ -33,6 +33,40 @@ function customerEmail(order: OrderRecord, brand: string, supportEmail: string) 
   return shell(`<div style="font-size:12px;font-weight:800;color:#c4661b;text-transform:uppercase;letter-spacing:1px">Order received</div><h1 style="margin:8px 0 10px;font-size:28px;color:#153f27">Thank you for your order!</h1><p style="color:#4e5b53;line-height:1.7">Hi ${escapeHtml(order.customerName)},</p><p style="color:#4e5b53;line-height:1.7">We have received your order successfully. Our sales representative will call you soon to confirm your order.</p><div style="background:#f8f5ec;border-radius:14px;padding:18px;margin:22px 0"><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${row("Order ID", order.orderId)}${row("Product", order.productName)}${row("Quantity", order.quantity)}${row("Delivery fee", formatNpr(order.deliveryFee))}${row("Total price", formatNpr(order.totalPrice))}${row("Payment method", order.paymentMethod)}</table></div><p style="color:#4e5b53;line-height:1.7">Questions? Reply to this email or contact <a href="mailto:${escapeHtml(supportEmail)}" style="color:#17603a">${escapeHtml(supportEmail)}</a>.</p><p style="margin:22px 0 0;color:#4e5b53">Thank you,<br><strong>${escapeHtml(brand)}</strong></p>`, brand);
 }
 
+function adminText(order: OrderRecord) {
+  return [
+    "New COD order received",
+    `Order ID: ${order.orderId}`,
+    `Customer: ${order.customerName}`,
+    `Phone: ${order.phone}`,
+    `Email: ${order.email}`,
+    `Location: ${order.location}`,
+    `Product: ${order.productName}`,
+    `Quantity: ${order.quantity}`,
+    `Delivery: ${order.deliveryZone} (${formatNpr(order.deliveryFee)})`,
+    `Total: ${formatNpr(order.totalPrice)}`,
+    `Payment: ${order.paymentMethod}`,
+    "Please call the customer to confirm the order.",
+  ].join("\n");
+}
+
+function customerText(order: OrderRecord, brand: string, supportEmail: string) {
+  return [
+    `Hi ${order.customerName},`,
+    "",
+    "Thank you. We received your order successfully. Our representative will call you soon to confirm it.",
+    `Order ID: ${order.orderId}`,
+    `Product: ${order.productName}`,
+    `Quantity: ${order.quantity}`,
+    `Delivery fee: ${formatNpr(order.deliveryFee)}`,
+    `Total: ${formatNpr(order.totalPrice)}`,
+    `Payment: ${order.paymentMethod}`,
+    "",
+    `Questions? Reply to this email or contact ${supportEmail}.`,
+    `— ${brand}`,
+  ].join("\n");
+}
+
 export async function sendOrderEmails(order: OrderRecord) {
   const port = Number(required("SMTP_PORT"));
   const businessEmail = required("BUSINESS_EMAIL");
@@ -50,14 +84,16 @@ export async function sendOrderEmails(order: OrderRecord) {
       from,
       to: businessEmail,
       replyTo: order.email,
-      subject: `New Product Order Received - ${order.orderId}`,
+      subject: `New COD order — ${order.orderId}`,
+      text: adminText(order),
       html: adminEmail(order, brand),
     }),
     transporter.sendMail({
       from,
       to: order.email,
       replyTo: businessEmail,
-      subject: `Your Order Has Been Received - ${brand}`,
+      subject: `Order confirmation — ${order.orderId} | ${brand}`,
+      text: customerText(order, brand, businessEmail),
       html: customerEmail(order, brand, businessEmail),
     }),
   ]);
