@@ -46,6 +46,25 @@ function createdAtKathmandu() {
   }).format(new Date());
 }
 
+function diagnosticCode(error: unknown, step: "request" | "sheet" | "email") {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("missing required environment variable")) return "CONFIG_MISSING";
+  if (step === "sheet") {
+    if (message.includes("not a valid pem") || message.includes("does not contain key data") || message.includes("decoder routines") || message.includes("pem routines")) return "GOOGLE_KEY_FORMAT";
+    if (message.includes("invalid_grant") || message.includes("invalid jwt")) return "GOOGLE_CREDENTIALS_REJECTED";
+    if (message.includes("failed (403)")) return "GOOGLE_SHEET_ACCESS_DENIED";
+    if (message.includes("failed (404)")) return "GOOGLE_SHEET_NOT_FOUND";
+    if (message.includes("has not been used") || message.includes("is disabled")) return "GOOGLE_SHEETS_API_DISABLED";
+    return "GOOGLE_SHEETS_UNKNOWN";
+  }
+  if (step === "email") {
+    if (message.includes("invalid login") || message.includes("authentication")) return "SMTP_AUTH_FAILED";
+    if (message.includes("timeout") || message.includes("connection")) return "SMTP_CONNECTION_FAILED";
+    return "SMTP_UNKNOWN";
+  }
+  return "ORDER_UNKNOWN";
+}
+
 export async function POST(request: NextRequest) {
   if (!allowedOrigin(request)) return NextResponse.json({ error: "This order request came from an unauthorized website." }, { status: 403 });
 
@@ -95,14 +114,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error(`Order submission failed [${orderId}] at ${orderStep}`, error instanceof Error ? error.message : "Unknown error");
-    const configurationError = error instanceof Error && error.message.startsWith("Missing required environment variable");
-    const errorMessage = configurationError
+    const diagnostic = diagnosticCode(error, orderStep);
+    const errorMessage = diagnostic === "CONFIG_MISSING"
       ? "The order system is not configured yet. Please contact support."
       : orderStep === "sheet"
         ? "We could not save your order. Please contact support."
         : orderStep === "email"
           ? "Your order was saved, but confirmation emails could not be sent. Please contact support."
           : "We could not complete your order. Please try again or contact support.";
-    return NextResponse.json({ error: errorMessage, code: `ORDER_${orderStep.toUpperCase()}_FAILED` }, { status: 500 });
+    return NextResponse.json({ error: errorMessage, code: `ORDER_${orderStep.toUpperCase()}_FAILED`, diagnostic }, { status: 500 });
   }
 }
