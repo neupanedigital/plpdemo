@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
   if (!allowedOrigin(request)) return NextResponse.json({ error: "This order request came from an unauthorized website." }, { status: 403 });
 
   let orderId = "unknown";
+  let orderStep: "request" | "sheet" | "email" = "request";
   try {
     const body = await request.json();
     const parsed = orderInputSchema.safeParse(body);
@@ -81,16 +82,27 @@ export async function POST(request: NextRequest) {
       notes: "",
     };
 
+    orderStep = "sheet";
     const sheetResult = await saveOrderToSheet(order);
-    if (!sheetResult.alreadySaved) await sendOrderEmails(order);
+    if (!sheetResult.alreadySaved) {
+      orderStep = "email";
+      await sendOrderEmails(order);
+    }
 
     return NextResponse.json({
       success: true,
       order: { orderId, productName: order.productName, quantity: order.quantity, totalPrice: order.totalPrice, paymentMethod: order.paymentMethod },
     });
   } catch (error) {
-    console.error(`Order submission failed [${orderId}]`, error instanceof Error ? error.message : "Unknown error");
+    console.error(`Order submission failed [${orderId}] at ${orderStep}`, error instanceof Error ? error.message : "Unknown error");
     const configurationError = error instanceof Error && error.message.startsWith("Missing required environment variable");
-    return NextResponse.json({ error: configurationError ? "The order system is not configured yet. Please contact support." : "We could not complete every order step. Please try again or contact support." }, { status: 500 });
+    const errorMessage = configurationError
+      ? "The order system is not configured yet. Please contact support."
+      : orderStep === "sheet"
+        ? "We could not save your order. Please contact support."
+        : orderStep === "email"
+          ? "Your order was saved, but confirmation emails could not be sent. Please contact support."
+          : "We could not complete your order. Please try again or contact support.";
+    return NextResponse.json({ error: errorMessage, code: `ORDER_${orderStep.toUpperCase()}_FAILED` }, { status: 500 });
   }
 }

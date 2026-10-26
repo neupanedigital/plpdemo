@@ -75,9 +75,12 @@ export async function sendOrderEmails(order: OrderRecord) {
     host: required("SMTP_HOST"),
     port,
     secure: port === 465,
-    auth: { user: required("SMTP_USER"), pass: required("SMTP_PASS") },
+    auth: {
+      user: required("SMTP_USER").trim().replace(/^["']|["']$/g, ""),
+      pass: required("SMTP_PASS").replace(/\s+/g, ""),
+    },
   });
-  const from = required("EMAIL_FROM");
+  const from = required("EMAIL_FROM").trim().replace(/^["']|["']$/g, "");
 
   await Promise.all([
     transporter.sendMail({

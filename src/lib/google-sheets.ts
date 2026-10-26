@@ -40,16 +40,28 @@ function required(name: string) {
   return value;
 }
 
+function normalizePrivateKey(value: string) {
+  const decoded = value.trim().replace(/\\n/g, "\n").replace(/\\r/g, "");
+  const match = decoded.match(/-----BEGIN PRIVATE KEY-----([\s\S]*?)-----END PRIVATE KEY-----/);
+  if (!match) throw new Error("GOOGLE_PRIVATE_KEY is not a valid PEM private key.");
+
+  const body = match[1].replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!body) throw new Error("GOOGLE_PRIVATE_KEY does not contain key data.");
+
+  const lines = body.match(/.{1,64}/g)?.join("\n");
+  return `-----BEGIN PRIVATE KEY-----\n${lines}\n-----END PRIVATE KEY-----\n`;
+}
+
 function escapeSheetName(name: string) {
   return `'${name.replace(/'/g, "''")}'`;
 }
 
 async function getContext() {
-  const spreadsheetId = required("GOOGLE_SHEET_ID");
-  const tabName = process.env.GOOGLE_SHEET_TAB_NAME || "Orders";
+  const spreadsheetId = required("GOOGLE_SHEET_ID").trim().replace(/^["']|["']$/g, "");
+  const tabName = (process.env.GOOGLE_SHEET_TAB_NAME || "Orders").trim().replace(/^["']|["']$/g, "");
   const auth = new JWT({
-    email: required("GOOGLE_SERVICE_ACCOUNT_EMAIL"),
-    key: required("GOOGLE_PRIVATE_KEY").replace(/\\n/g, "\n"),
+    email: required("GOOGLE_SERVICE_ACCOUNT_EMAIL").trim().replace(/^["']|["']$/g, ""),
+    key: normalizePrivateKey(required("GOOGLE_PRIVATE_KEY")),
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
   const credentials = await auth.authorize();
