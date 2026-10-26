@@ -7,10 +7,36 @@ import { calculateOrder, PRODUCT } from "@/lib/product";
 
 export const runtime = "nodejs";
 
+function normalizeOrigin(value: string | null | undefined, defaultProtocol = "https") {
+  if (!value) return null;
+  try {
+    const url = new URL(value.includes("://") ? value : `${defaultProtocol}://${value}`);
+    return `${url.protocol}//${url.host}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function allowedOrigin(request: NextRequest) {
-  const configured = process.env.FRONTEND_URL?.replace(/\/$/, "");
-  const origin = request.headers.get("origin")?.replace(/\/$/, "");
-  return !configured || !origin || configured === origin;
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  if (!origin) return true;
+
+  const forwardedHost = (request.headers.get("x-forwarded-host") || request.headers.get("host"))
+    ?.split(",")[0]
+    .trim();
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0].trim() || request.nextUrl.protocol.replace(":", "") || "https";
+  const requestHostOrigin = normalizeOrigin(forwardedHost, forwardedProtocol);
+
+  // Vercel forwards the public host to the API route. Accepting that exact host
+  // keeps same-site checkout requests working across production and preview URLs.
+  if (requestHostOrigin === origin) return true;
+
+  const configuredOrigins = [process.env.FRONTEND_URL, process.env.NEXT_PUBLIC_SITE_URL, process.env.VERCEL_URL]
+    .flatMap((value) => value?.split(",") || [])
+    .map((value) => normalizeOrigin(value.trim()))
+    .filter((value): value is string => Boolean(value));
+
+  return configuredOrigins.includes(origin);
 }
 
 function createdAtKathmandu() {
